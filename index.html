@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Case Dashboard — Marine & SML</title>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
 :root {
@@ -53,7 +52,7 @@ header { padding:20px 0 18px; display:flex; align-items:center; justify-content:
 .upload-area { display:flex; gap:8px; }
 .upbtn { display:flex; align-items:center; gap:6px; padding:8px 14px; border:none; border-radius:8px; font-size:12px; font-family:'Sarabun',sans-serif; font-weight:600; cursor:pointer; transition:all .2s; }
 .upbtn.marine { background:linear-gradient(135deg,rgba(0,212,255,0.25),rgba(0,212,255,0.1)); color:var(--marine); border:1px solid rgba(0,212,255,0.3); }
-.upbtn.sml { background:linear-gradient(135deg,rgba(167,139,250,0.25),rgba(167,139,250,0.1)); color:var(--sml); border:1px solid rgba(167,139,250,0.3); }
+.upbtn.loading { opacity:0.6; pointer-events:none; }
 .upbtn:hover { transform:translateY(-1px); }
 
 /* ── SOURCE TABS ── */
@@ -177,6 +176,13 @@ td { padding:10px 14px; font-size:12px; vertical-align:middle; }
 .no-data { text-align:center; padding:50px; color:var(--muted); }
 .no-data .ico { font-size:40px; margin-bottom:10px; }
 
+#loadingBar {
+  display:none; position:fixed; top:0; left:0; right:0; height:3px; z-index:9999;
+  background:linear-gradient(90deg, var(--marine), var(--sml), var(--marine));
+  background-size:200% 100%;
+  animation:shimmer 1.2s infinite linear;
+}
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 #toast { position:fixed; bottom:20px; right:20px; padding:10px 18px; background:var(--surface2); border:1px solid var(--success); border-radius:10px; color:var(--success); font-size:12px; font-family:'Space Mono',monospace; transform:translateY(80px); opacity:0; transition:all .3s; z-index:9999; }
 #toast.show { transform:translateY(0); opacity:1; }
 
@@ -211,6 +217,7 @@ td { padding:10px 14px; font-size:12px; vertical-align:middle; }
 </style>
 </head>
 <body>
+<div id="loadingBar"></div>
 <div class="wrap">
 
 <!-- HEADER -->
@@ -226,11 +233,8 @@ td { padding:10px 14px; font-size:12px; vertical-align:middle; }
     <div class="live-badge"><div class="dot"></div>LIVE</div>
     <div class="ts" id="tsLabel">—</div>
     <div class="upload-area">
-      <button class="upbtn marine" onclick="document.getElementById('fMarine').click()">📂 Marine Excel</button>
-      <button class="upbtn sml" onclick="document.getElementById('fSml').click()">📂 SML Excel</button>
+      <button class="upbtn marine" onclick="loadAllSheets(true)" id="refreshBtn">🔄 Refresh ข้อมูล</button>
     </div>
-    <input type="file" id="fMarine" accept=".xlsx,.xls" style="display:none" onchange="handleUpload(event,'Marine')">
-    <input type="file" id="fSml" accept=".xlsx,.xls" style="display:none" onchange="handleUpload(event,'SML')">
   </div>
 </header>
 
@@ -316,28 +320,125 @@ td { padding:10px 14px; font-size:12px; vertical-align:middle; }
 <div id="toast"></div>
 
 <script>
-// ── DEFAULT DATA ──
-const MARINE_DATA = [{"Column 2":"REQ-0001","Timestamp":"2026-02-03 17:03","ผู้แจ้ง":"test","ระบุร้านค้า":"บุญเจริญฯ อ.บัวเซต สุรินทร์","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"test","Priority":1,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0002","Timestamp":"2026-02-03 17:03","ผู้แจ้ง":"test","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"tes","Priority":1,"Type":"Defect","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0003","Timestamp":"2026-02-03 17:50","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab รายการชำระเงิน","เรื่อง":"รายการตั้งหนี้ไม่แสดง","Priority":3,"Type":"Defect","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0004","Timestamp":"2026-02-03 22:30","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"POS","เรื่อง":"QR Code ttb นิติบุคคล ที่เครื่อง POS / ในแอพธนาคารแสดงเลขบัญชีไม่ตรงกับ QR ต้นฉบับ","Priority":3,"Type":"Defect","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0005","Timestamp":"2026-02-03 22:35","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"POS & Mobile app & รายงาน","เรื่อง":"เมื่อยกเลิกรายการขายทั้งบิล มีสถานะยกเลิกที่หน้าเครื่อง POS แต่ไม่มีเอกสารยกเลิกออกมา","Priority":3,"Type":"Defect","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0006","Timestamp":"2026-02-03 22:37","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Mobile","เรื่อง":"Report ในมือถือ กำไร-ขาดทุนไม่ตรง","Priority":3,"Type":"Defect","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0007","Timestamp":"2026-02-03 22:43","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"เมนูในรายการบัญชี > ตรวจสอบข้อมูลรายวัน กดเข้าไปแล้วไม่สามารถใช้งานได้","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0008","Timestamp":"2026-02-03 22:49","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab รายงาน","เรื่อง":"รายงานสินค้าคงเหลือ ทั้ง 5 เมนู มีปัญหาตอนเรียกดูรายงาน หมุน/ค้าง","Priority":2,"Type":"Defect","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0009","Timestamp":"2026-02-03 22:54","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab รายงาน","เรื่อง":"รายงานสต๊อกทุกรายงาน ข้อมูลที่แสดงไม่ตรงตามเงื่อนไข","Priority":3,"Type":"Defect","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0010","Timestamp":"2026-02-03 22:57","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"เมนูซื้อสินค้ามีไว้ใช้ในกรณีไหน","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0011","Timestamp":"2026-02-03 22:58","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"เมนูรับเงินล่วงหน้า/คืนเงินล่วงหน้าใช้ทำอะไร ต่างจากเงินมัดจำอย่างไร","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0012","Timestamp":"2026-02-03 22:59","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"รายการขายเครดิตไม่แสดง รายการในเมนูรับชำระ","Priority":3,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0013","Timestamp":"2026-02-03 23:02","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"เมนูขาย: (ขายเครดิต) สามารถเลือกแสดงราคา/ไม่แสดงราคาในใบส่งสินค้า","Priority":3,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0014","Timestamp":"2026-02-03 23:04","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"หน้าขายเครดิต อยากให้สามารถปริ้นเอกสาร 2 ใบ","Priority":3,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0015","Timestamp":"2026-02-03 23:05","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab รายงาน","เรื่อง":"รายงานซื้อ และรายงานขาย เพิ่มแยกตามหมวดหมู่/Supplier/กลุ่มสินค้า","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0016","Timestamp":"2026-02-03 23:06","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"อยากให้เพิ่มเมนูเบิกสินค้าสำหรับทีมขายออนไลน์","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0017","Timestamp":"2026-02-03 23:08","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab รายงาน","เรื่อง":"เพิ่มรายงานแต้มสมาชิก","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0018","Timestamp":"2026-02-03 23:09","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"เพิ่มฟังก์ชันการนับสต๊อกตามสิทธิ์","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0019","Timestamp":"2026-02-03 23:11","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"Tab ข้อมูลหลัก","เรื่อง":"Stock อ้างอิงแปลกๆ","Priority":3,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0020","Timestamp":"2026-02-04 09:00","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab รายงาน","เรื่อง":"ต้องการดึงข้อมูลลูกค้าในระบบ","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0021","Timestamp":"2026-02-04 09:03","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"ต้องการดึงข้อมูลการเบิกสินค้า","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0022","Timestamp":"2026-02-04 09:19","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"ทุกร้าน","Module":"Tab ข้อมูลหลัก","เรื่อง":"ขอเพิ่ม Column รหัสสินค้า, BarReference ในสินค้า master","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0023","Timestamp":"2026-02-04 09:33","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"สั่งพิมพ์ใบเสนอราคาไม่ได้","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0024","Timestamp":"2026-02-04 10:43","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลหลัก","เรื่อง":"การปรับสต๊อกจำนวนมาก เนื่องจากร้านคืนสินค้า Lot ใหญ่","Priority":3,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0025","Timestamp":"2026-02-04 11:32","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"บุญเจริญฯ อ.บัวเซต สุรินทร์","Module":"Tab ข้อมูลหลัก","เรื่อง":"Upload Master 1 รหัสมีหลายหน่วย","Priority":2,"Type":"Defect","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0026","Timestamp":"2026-03-11 09:43","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"Re Training ระบบหลังบ้าน","เรื่อง":"Re Training ระบบหลังบ้าน","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0027","Timestamp":"2026-03-11 09:47","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"Setup ระบบหลังบ้าน(เป็นร้านใหม่)","เรื่อง":"Setup ระบบหลังบ้าน(เป็นร้านใหม๋)","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0028","Timestamp":"2026-03-11 09:49","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"ระบบหลังร้าน","เรื่อง":"ทำคู่มือเพื่อใช้อบรม Re-Training","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0029","Timestamp":"2026-03-11 09:53","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"ระบบหลังบ้าน","เรื่อง":"อบรม Re-Training การรับสินค้าตามหน่วย","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0030","Timestamp":"2026-03-11 09:57","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"ระบบหลังบ้าน - Upload file","เรื่อง":"ปัญหาการ Upload file Master เกิด Error รูปแบบไฟล์ไม่ถูกต้อง","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0031","Timestamp":"2026-03-11 10:00","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"ระบบหลังบ้าน - Upload file","เรื่อง":"ติดตามปัญหา Upload file กับทีม SML Marine","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0032","Timestamp":"2026-03-11 10:09","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"ระบบหลังบ้าน Upload file","เรื่อง":"พบปัญหา Master สินค้าอ้างอิงบาร์โค้ดให้อัตโนมัติ","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0033","Timestamp":"2026-03-11 10:17","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"ระบบหลังร้าน - Upload file","เรื่อง":"ทดสอบการ Upload file - Master สินค้า","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0034","Timestamp":"2026-03-11 10:27","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"Setup ร้านใหม่","เรื่อง":"Setup ร้าน CIA ใหม่ เพื่อแก้ไขปัญหา","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"}];
-
-const SML_DATA = [{"Column 2":"REQ-0001","Timestamp":"2026-02-03 16:56","ผู้แจ้ง":"test","ระบุร้านค้า":"CTW ร้านโชคทวีวัสดุ","Module":"2.สินค้า","เรื่อง":"test","Priority":1,"Type":"Defect","SML Status":"Done","DH Status":"","Source":"SML"},{"Column 2":"REQ-0002","Timestamp":"2026-02-03 16:57","ผู้แจ้ง":"test","ระบุร้านค้า":"MS_เสริมสิน","Module":"1.เริ่มต้น","เรื่อง":"test","Priority":1,"Type":"Defect","SML Status":"Done","DH Status":"","Source":"SML"},{"Column 2":"REQ-0003","Timestamp":"2026-02-03 17:17","ผู้แจ้ง":"Test","ระบุร้านค้า":"KS_ร้านก่อศิลป์","Module":"12. Data","เรื่อง":"test","Priority":1,"Type":"CR","SML Status":"Done","DH Status":"","Source":"SML"},{"Column 2":"REQ-0004","Timestamp":"2026-02-03 21:46","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"CTW ร้านโชคทวีวัสดุ","Module":"2.สินค้า","เรื่อง":"สินค้ายกเลิกขายแสดงที่รายงานใด","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0005","Timestamp":"2026-02-03 21:50","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"CTW ร้านโชคทวีวัสดุ","Module":"2.สินค้า","เรื่อง":"การเพิ่มสินค้า Master อยากให้ทำเสร็จในหน้าเดียว","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0006","Timestamp":"2026-02-03 21:51","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"CTW ร้านโชคทวีวัสดุ","Module":"2.สินค้า","เรื่อง":"รายงานวิเคราะห์สินค้า เพิ่มชื่อกลุ่มสินค้าหลัก","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0007","Timestamp":"2026-02-03 21:54","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"CTW ร้านโชคทวีวัสดุ","Module":"2.สินค้า","เรื่อง":"รายงานยอดคงเหลือสินค้า ให้แสดงสินค้าที่มี Stock 0 ด้วย","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0008","Timestamp":"2026-02-03 21:57","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"CTW ร้านโชคทวีวัสดุ","Module":"2.สินค้า","เรื่อง":"เพิ่มข้อมูลในรายงาน 1004EX2","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0009","Timestamp":"2026-02-03 22:00","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"CTW ร้านโชคทวีวัสดุ","Module":"2.สินค้า","เรื่อง":"Filter การเลือกกลุ่มสินค้าในรายงานต่างๆ","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0010","Timestamp":"2026-02-03 22:04","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"KS_ร้านก่อศิลป์","Module":"4.ขาย","เรื่อง":"รายงานกำไร ราคาในรายงานไม่มี Vat","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0011","Timestamp":"2026-02-03 22:06","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"KS_ร้านก่อศิลป์","Module":"4.ขาย","เรื่อง":"เพิ่มฟังก์ชั่นเลือกแสดง มีราคา/ไม่มีราคาในใบส่งสินค้า","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0012","Timestamp":"2026-02-03 22:10","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"MS_เสริมสิน","Module":"5.ขาย POS","เรื่อง":"ให้ใส่รหัสสมาชิกขั้นตอนไหนก็ได้","Priority":3,"Type":"Defect","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0013","Timestamp":"2026-02-03 22:12","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"MS_เสริมสิน","Module":"5.ขาย POS","เรื่อง":"ลิ้นชักเงินไม่เด้งออกเมื่อรับเงิน","Priority":3,"Type":"Defect","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0014","Timestamp":"2026-02-03 22:13","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"MS_เสริมสิน","Module":"5.ขาย POS","เรื่อง":"ตั้งค่าแสดง QR ที่ POS จอ 2 ให้ลูกค้าแสกนจ่าย","Priority":3,"Type":"Issue","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0015","Timestamp":"2026-02-04 09:13","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"SML ในทุกร้าน","Module":"System","เรื่อง":"Cannot Access SML DATA","Priority":2,"Type":"Defect","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0016","Timestamp":"2026-02-05 09:16","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"PC ร้านพิเชียรวัสดุ","Module":"10. บัญชี","เรื่อง":"อยากได้จำนวนเงินหลัง Vat ในเอกสาร SRV","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0017","Timestamp":"2026-02-23 10:40","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"MS_เสริมสิน","Module":"3.ซื้อ","เรื่อง":"ต้องการเปิด PO ให้ดึงราคาซื้อล่าสุด","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0018","Timestamp":"2026-02-27 09:13","ผู้แจ้ง":"คุณมิน - ก่อศิลป์","ระบุร้านค้า":"KS_ร้านก่อศิลป์","Module":"ลงโปรแกรม SML ใหม่","เรื่อง":"ร้านลง Windows ใหม่แล้วไม่มีโปรแกรม SML","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0019","Timestamp":"2026-02-27 09:17","ผู้แจ้ง":"คุณมิน - ก่อศิลป์","ระบุร้านค้า":"KS_ร้านก่อศิลป์","Module":"Hardware","เรื่อง":"PC และ POS เครื่องเก่าปริ้นเอกสารไม่ได้","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0020","Timestamp":"2026-02-27 09:38","ผู้แจ้ง":"KAMONWAN J. - บัญชีโชคทวี","ระบุร้านค้า":"CTW ร้านโชคทวีวัสดุ","Module":"Hardware","เรื่อง":"ลงโปรแกรม SML ไม่ได้ ติด Error .net framework 3.5","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0021","Timestamp":"2026-03-02 09:50","ผู้แจ้ง":"คุณมิน - ก่อศิลป์","ระบุร้านค้า":"KS_ร้านก่อศิลป์","Module":"4.ขาย","เรื่อง":"ดึงรายงานขายสินค้าและบริการในระบบไม่ได้","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0022","Timestamp":"2026-03-02 13:29","ผู้แจ้ง":"Big พนักงานคลัง - ร้านพิเชียร","ระบุร้านค้า":"PC ร้านพิเชียรวัสดุ","Module":"3.ซื้อ","เรื่อง":"มองไม่เห็นเลขที่เอกสาร PI (รับสินค้า)","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0023","Timestamp":"2026-03-02 14:07","ผู้แจ้ง":"Big พนักงานคลังร้านพิเชียร","ระบุร้านค้า":"PC ร้านพิเชียรวัสดุ","Module":"3.ซื้อ","เรื่อง":"ยกเลิก PO ผิด และยอดไม่ตรงกับใบเสนอ","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"SML"}];
+// ── GOOGLE SHEETS URLs ──
+const SHEET_URLS = {
+  Marine: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRN8mH99bJMBZ4cKUgmP13C5YPv6xlwJO_Y9wds9MhB9nESnAVL9MqWcms9MkGZsPtsRInvRGntte_4/pub?output=csv",
+  SML:    "https://docs.google.com/spreadsheets/d/e/2PACX-1vSuJDiJQPT6J8tACf2pKDUXtaXYUTYCJyrveRDucwBuGDQw8PICxv-0lxcI4nFejeWG2TXmz3aVyore/pub?output=csv"
+};
+const REFRESH_INTERVAL = 60000; // auto-refresh every 60s
 
 // ── STATE ──
-let DB = { Marine: [...MARINE_DATA], SML: [...SML_DATA] };
+let DB = { Marine: [], SML: [] };
 let activeSource = 'ALL';
 let activeType = 'ALL';
-let activeKpi = null; // 'all','marine','sml','CR','Defect','Issue','open','done'
+let activeKpi = null;
+let shopSort = 'total';
 let charts = {};
+let refreshTimer = null;
 
+// ── CSV PARSER ──
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  // parse header
+  const headers = csvRow(lines[0]);
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const vals = csvRow(lines[i]);
+    if (!vals.length) continue;
+    const obj = {};
+    headers.forEach((h, idx) => obj[h] = (vals[idx] || '').trim());
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function csvRow(line) {
+  const result = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur); cur = ''; }
+    else cur += c;
+  }
+  result.push(cur);
+  return result;
+}
+
+// ── LOAD FROM GOOGLE SHEETS ──
+async function loadSheet(src) {
+  const url = SHEET_URLS[src];
+  const res = await fetch(url);
+  const text = await res.text();
+  const rows = parseCSV(text);
+  return rows
+    .filter(r => r['Column 2'] && r['Column 2'].startsWith('REQ'))
+    .map(r => ({
+      'Column 2':    r['Column 2'] || '',
+      'Timestamp':   (r['Timestamp'] || '').substring(0, 16),
+      'ผู้แจ้ง':     r['ผู้แจ้ง'] || '',
+      'ระบุร้านค้า': r['ระบุร้านค้า'] || '',
+      'Module':      (r['Module'] || '').trim(),
+      'เรื่อง':      r['เรื่อง'] || '',
+      'Priority':    parseInt(r['Priority']) || 0,
+      'Type':        r['Type'] || '',
+      'SML Status':  r['SML Status'] || '',
+      'DH Status':   r['DH Status'] || '',
+      'Source':      src
+    }));
+}
+
+async function loadAllSheets(manual = false) {
+  const btn = document.getElementById('refreshBtn');
+  btn.textContent = '⏳ กำลังโหลด...';
+  btn.classList.add('loading');
+  document.getElementById('loadingBar').style.display = 'block';
+
+  try {
+    const [marine, sml] = await Promise.all([loadSheet('Marine'), loadSheet('SML')]);
+    DB.Marine = marine;
+    DB.SML = sml;
+    updateAll();
+    if (manual) toast(`✓ โหลดสำเร็จ — Marine ${marine.length} / SML ${sml.length} เคส`);
+  } catch(e) {
+    toast('❌ โหลดข้อมูลไม่สำเร็จ กรุณาลองใหม่');
+    console.error(e);
+  }
+
+  btn.textContent = '🔄 Refresh ข้อมูล';
+  btn.classList.remove('loading');
+  document.getElementById('loadingBar').style.display = 'none';
+
+  // reset auto-refresh timer
+  clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => loadAllSheets(false), REFRESH_INTERVAL);
+}
+
+// ── FILTER HELPERS ──
+function getFiltered() {
+  let rows = activeSource === 'ALL' ? [...DB.Marine, ...DB.SML]
+           : activeSource === 'Marine' ? [...DB.Marine]
+           : [...DB.SML];
+  if (activeKpi === 'open') rows = rows.filter(r => !r['SML Status'] && !r['DH Status']);
+  else if (activeKpi === 'done') rows = rows.filter(r => r['SML Status']==='Done' || r['DH Status']==='Done');
+  else if (activeType !== 'ALL') rows = rows.filter(r => r.Type === activeType);
+  const q = (document.getElementById('searchQ').value || '').toLowerCase();
+  if (q) rows = rows.filter(r =>
+    [r['Column 2'], r['เรื่อง'], r['ระบุร้านค้า'], r['Module'], r['ผู้แจ้ง']].some(v => (v||'').toLowerCase().includes(q))
+  );
+  return rows;
+}
+function getAllSource(src) { return src === 'ALL' ? [...DB.Marine,...DB.SML] : DB[src] || []; }
+
+// ── KPI FILTER ──
 function kpiFilter(key, el) {
   if (activeKpi === key) {
-    // toggle off
     activeKpi = null;
     document.querySelectorAll('.kpi').forEach(k => k.classList.remove('kpi-active'));
   } else {
     activeKpi = key;
     document.querySelectorAll('.kpi').forEach(k => k.classList.remove('kpi-active'));
     el.classList.add('kpi-active');
-    // Sync source tab if marine/sml kpi clicked
     if (key === 'marine') {
       activeSource = 'Marine';
       document.querySelectorAll('.stab').forEach(b => b.className = 'stab ' + b.dataset.cls);
@@ -353,7 +454,6 @@ function kpiFilter(key, el) {
       document.getElementById('kpi-sml-wrap').style.display = '';
       document.getElementById('compareCard').style.display = 'none';
     }
-    // Sync type filter buttons for CR/Defect/Issue
     if (['CR','Defect','Issue'].includes(key)) {
       activeType = key;
       document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
@@ -364,52 +464,35 @@ function kpiFilter(key, el) {
       document.querySelector('.fbtn[data-f="ALL"]').classList.add('active');
     }
   }
-  renderShops();
-  renderTable();
+  renderShops(); renderTable();
 }
-
-function getFiltered() {
-  let rows = activeSource === 'ALL' ? [...DB.Marine, ...DB.SML]
-           : activeSource === 'Marine' ? [...DB.Marine]
-           : [...DB.SML];
-  // Apply KPI filter
-  if (activeKpi === 'open') rows = rows.filter(r => !r['SML Status'] && !r['DH Status']);
-  else if (activeKpi === 'done') rows = rows.filter(r => r['SML Status']==='Done' || r['DH Status']==='Done');
-  else if (activeType !== 'ALL') rows = rows.filter(r => r.Type === activeType);
-  const q = (document.getElementById('searchQ').value || '').toLowerCase();
-  if (q) rows = rows.filter(r =>
-    [r['Column 2'], r['เรื่อง'], r['ระบุร้านค้า'], r['Module'], r['ผู้แจ้ง']].some(v => (v||'').toLowerCase().includes(q))
-  );
-  return rows;
-}
-function getAllSource(src) { return src === 'ALL' ? [...DB.Marine,...DB.SML] : DB[src] || []; }
 
 // ── TABS ──
 function setSource(src, btn) {
   activeSource = src;
+  activeKpi = null;
+  document.querySelectorAll('.kpi').forEach(k => k.classList.remove('kpi-active'));
   document.querySelectorAll('.stab').forEach(b => b.className = 'stab ' + b.dataset.cls);
   btn.classList.add('active-' + src.toLowerCase());
-  // show/hide source KPIs
   document.getElementById('kpi-marine-wrap').style.display = (src === 'SML') ? 'none' : '';
   document.getElementById('kpi-sml-wrap').style.display = (src === 'Marine') ? 'none' : '';
   document.getElementById('compareCard').style.display = (src === 'ALL') ? '' : 'none';
   updateAll();
 }
-// set dataset on tabs for class reset
 document.querySelectorAll('.stab').forEach(b => {
   const cls = b.classList.contains('stab-all') ? 'stab-all' : b.classList.contains('stab-marine') ? 'stab-marine' : 'stab-sml';
   b.dataset.cls = cls;
 });
 
 function setType(t, btn) {
-  activeType = t;
+  activeType = t; activeKpi = null;
+  document.querySelectorAll('.kpi').forEach(k => k.classList.remove('kpi-active'));
   document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   renderTable();
 }
 
 // ── UPDATE ALL ──
-let shopSort = 'total';
 function setShopSort(s, btn) {
   shopSort = s;
   document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
@@ -419,7 +502,7 @@ function setShopSort(s, btn) {
 function updateAll() { updateKPIs(); updateCharts(); renderShops(); renderTable(); updateTs(); }
 
 function updateKPIs() {
-  const d = (activeKpi && activeKpi !== 'all' && activeKpi !== 'marine' && activeKpi !== 'sml') ? getFiltered() : getAllSource(activeSource);
+  const d = getAllSource(activeSource);
   document.getElementById('k-total').textContent = d.length;
   document.getElementById('k-marine').textContent = DB.Marine.length;
   document.getElementById('k-sml').textContent = DB.SML.length;
@@ -435,20 +518,16 @@ function updateKPIs() {
 
 function updateCharts() {
   const d = getAllSource(activeSource);
-
-  // Module bar
   const mc = {};
   d.forEach(r => { const m=(r.Module||'ไม่ระบุ').trim(); mc[m]=(mc[m]||0)+1; });
   const top = Object.entries(mc).sort((a,b)=>b[1]-a[1]).slice(0,10);
   if (charts.mod) charts.mod.destroy();
   charts.mod = new Chart(document.getElementById('cModule').getContext('2d'), {
     type:'bar',
-    data:{ labels:top.map(x=>x[0]), datasets:[{
-      data:top.map(x=>x[1]),
+    data:{ labels:top.map(x=>x[0]), datasets:[{ data:top.map(x=>x[1]),
       backgroundColor:top.map((_,i)=>`hsla(${195+i*18},75%,55%,0.65)`),
       borderColor:top.map((_,i)=>`hsl(${195+i*18},75%,55%)`),
-      borderWidth:1, borderRadius:4
-    }]},
+      borderWidth:1, borderRadius:4 }]},
     options:{ responsive:true, maintainAspectRatio:false,
       plugins:{legend:{display:false}},
       scales:{
@@ -457,8 +536,6 @@ function updateCharts() {
       }
     }
   });
-
-  // Type donut
   const types=['CR','Defect','Issue'];
   const tc=types.map(t=>d.filter(r=>r.Type===t).length);
   if (charts.type) charts.type.destroy();
@@ -466,23 +543,17 @@ function updateCharts() {
     type:'doughnut',
     data:{ labels:types, datasets:[{ data:tc,
       backgroundColor:['rgba(96,165,250,0.75)','rgba(248,113,113,0.75)','rgba(251,191,36,0.75)'],
-      borderColor:['#60a5fa','#f87171','#fbbf24'], borderWidth:2, hoverOffset:5
-    }]},
+      borderColor:['#60a5fa','#f87171','#fbbf24'], borderWidth:2, hoverOffset:5 }]},
     options:{ responsive:true, maintainAspectRatio:false, cutout:'62%',
       plugins:{ legend:{ position:'bottom', labels:{color:'#6b84a0',font:{family:'Space Mono',size:9},padding:12,boxWidth:8} } }
     }
   });
-
-  // Source compare
   if (activeSource === 'ALL') {
-    const total = DB.Marine.length + DB.SML.length;
-    const mp = total ? Math.round(DB.Marine.length/total*100) : 0;
-    const sp = total ? Math.round(DB.SML.length/total*100) : 0;
     const metrics = [
-      { lbl:'เคสทั้งหมด', mV:DB.Marine.length, sV:DB.SML.length, max:Math.max(DB.Marine.length,DB.SML.length) },
-      { lbl:'CR', mV:DB.Marine.filter(r=>r.Type==='CR').length, sV:DB.SML.filter(r=>r.Type==='CR').length, max:null },
-      { lbl:'Defect', mV:DB.Marine.filter(r=>r.Type==='Defect').length, sV:DB.SML.filter(r=>r.Type==='Defect').length, max:null },
-      { lbl:'Issue', mV:DB.Marine.filter(r=>r.Type==='Issue').length, sV:DB.SML.filter(r=>r.Type==='Issue').length, max:null },
+      { lbl:'เคสทั้งหมด', mV:DB.Marine.length, sV:DB.SML.length, max:Math.max(DB.Marine.length,DB.SML.length)||1 },
+      { lbl:'CR', mV:DB.Marine.filter(r=>r.Type==='CR').length, sV:DB.SML.filter(r=>r.Type==='CR').length },
+      { lbl:'Defect', mV:DB.Marine.filter(r=>r.Type==='Defect').length, sV:DB.SML.filter(r=>r.Type==='Defect').length },
+      { lbl:'Issue', mV:DB.Marine.filter(r=>r.Type==='Issue').length, sV:DB.SML.filter(r=>r.Type==='Issue').length },
     ];
     metrics.forEach(m => { if(!m.max) m.max = Math.max(m.mV, m.sV) || 1; });
     document.getElementById('srcCompare').innerHTML = metrics.map(m=>`
@@ -503,8 +574,7 @@ function updateCharts() {
 }
 
 function renderShops() {
-  const d = getAllSource(activeSource);
-  // Build shop map
+  const d = (activeKpi && activeKpi !== 'all' && activeKpi !== 'marine' && activeKpi !== 'sml') ? getFiltered() : getAllSource(activeSource);
   const shopMap = {};
   d.forEach(r => {
     const shop = (r['ระบุร้านค้า'] || 'ไม่ระบุ').trim();
@@ -516,15 +586,10 @@ function renderShops() {
     if (r.Source === 'Marine') shopMap[shop].marine++;
     else shopMap[shop].sml++;
   });
-
   let entries = Object.entries(shopMap);
   if (shopSort === 'total') entries.sort((a,b) => b[1].total - a[1].total);
   else entries.sort((a,b) => a[0].localeCompare(b[0], 'th'));
-
-  const maxTotal = entries.length ? entries[0][1].total : 1;
-  // when sorted by name, recalculate max
   const maxVal = Math.max(...entries.map(e=>e[1].total)) || 1;
-
   document.getElementById('shopList').innerHTML = entries.map(([name, s]) => {
     const pct = Math.round(s.total / maxVal * 100);
     const crPct = s.total ? Math.round(s.CR/s.total*100) : 0;
@@ -593,64 +658,14 @@ function updateTs() {
   document.getElementById('tsLabel').textContent = 'Updated ' + new Date().toLocaleTimeString('th-TH');
 }
 
-// ── FILE UPLOAD ──
-function handleUpload(e, src) {
-  const file = e.target.files[0]; if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    try {
-      const wb = XLSX.read(new Uint8Array(ev.target.result), {type:'array',cellDates:true});
-      const sheetName = wb.SheetNames.find(n=>n===src) || wb.SheetNames[0];
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {defval:''});
-      const parsed = rows.filter(r=>String(r['Column 2']).startsWith('REQ')).map(r=>({
-        'Column 2': r['Column 2']||'',
-        'Timestamp': fmtDate(r['Timestamp']),
-        'ผู้แจ้ง': r['ผู้แจ้ง']||'',
-        'ระบุร้านค้า': r['ระบุร้านค้า']||'',
-        'Module': (r['Module']||'').trim(),
-        'เรื่อง': r['เรื่อง']||'',
-        'Priority': parseInt(r['Priority'])||0,
-        'Type': r['Type']||'',
-        'SML Status': r['SML Status']||'',
-        'DH Status': r['DH Status']||'',
-        'Source': src
-      }));
-      if (parsed.length) {
-        DB[src] = parsed;
-        updateAll();
-        toast(`✓ ${src}: โหลด ${parsed.length} รายการจาก ${file.name}`);
-      } else { toast('⚠ ไม่พบข้อมูลในรูปแบบที่รองรับ'); }
-    } catch(err) { toast('❌ เกิดข้อผิดพลาดในการอ่านไฟล์'); }
-  };
-  reader.readAsArrayBuffer(file);
-}
-
-function fmtDate(v) {
-  if (!v) return '';
-  if (v instanceof Date) return v.toLocaleDateString('th-TH',{year:'numeric',month:'2-digit',day:'2-digit'})+' '+v.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
-  return String(v).substring(0,16);
-}
-
 function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 3500);
 }
 
-// ── DRAG DROP ──
-document.body.addEventListener('dragover', e=>e.preventDefault());
-document.body.addEventListener('drop', e => {
-  e.preventDefault();
-  const file = e.dataTransfer.files[0];
-  if (!file) return;
-  const src = file.name.toLowerCase().includes('sml') ? 'SML' : 'Marine';
-  const fakeEvt = { target:{ files:[file] } };
-  handleUpload(fakeEvt, src);
-  toast(`🔍 ตรวจพบไฟล์ ${file.name} → บันทึกเป็น ${src}`);
-});
-
-// ── INIT ──
-updateAll();
+// ── INIT: load from Google Sheets ──
+loadAllSheets(false);
 </script>
 </body>
 </html>
