@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Case Dashboard — Marine & SML</title>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #080d18;
+  --surface: #0f1826;
+  --surface2: #162032;
+  --surface3: #1c2a40;
+  --border: #1e3050;
+  --marine: #00d4ff;
+  --marine-dim: rgba(0,212,255,0.12);
+  --sml: #a78bfa;
+  --sml-dim: rgba(167,139,250,0.12);
+  --cr: #60a5fa;
+  --defect: #f87171;
+  --issue: #fbbf24;
+  --success: #34d399;
+  --warn: #f59e0b;
+  --danger: #ef4444;
+  --text: #e2e8f0;
+  --muted: #4a6080;
+  --muted2: #6b84a0;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Sarabun',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
+
+body::before {
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background: radial-gradient(ellipse 80% 50% at 20% 0%, rgba(0,212,255,0.04) 0%, transparent 60%),
+              radial-gradient(ellipse 60% 40% at 80% 100%, rgba(167,139,250,0.04) 0%, transparent 60%);
+}
+
+.wrap { position:relative; z-index:1; max-width:1480px; margin:0 auto; padding:0 24px 48px; }
+
+/* ── HEADER ── */
+header { padding:20px 0 18px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); margin-bottom:24px; }
+.logo { display:flex; align-items:center; gap:12px; }
+.logo-icon { width:42px; height:42px; border-radius:10px; background:linear-gradient(135deg,var(--marine),var(--sml)); display:flex; align-items:center; justify-content:center; font-size:20px; }
+.logo h1 { font-size:18px; font-weight:700; letter-spacing:-0.4px; }
+.logo span { font-size:11px; color:var(--muted2); font-family:'Space Mono',monospace; }
+.hdr-right { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.live-badge { display:flex; align-items:center; gap:6px; padding:5px 11px; background:rgba(52,211,153,0.08); border:1px solid rgba(52,211,153,0.25); border-radius:20px; font-size:10px; font-family:'Space Mono',monospace; color:var(--success); }
+.dot { width:6px; height:6px; border-radius:50%; background:var(--success); animation:blink 2s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.ts { font-size:10px; color:var(--muted); font-family:'Space Mono',monospace; }
+.upload-area { display:flex; gap:8px; }
+.upbtn { display:flex; align-items:center; gap:6px; padding:8px 14px; border:none; border-radius:8px; font-size:12px; font-family:'Sarabun',sans-serif; font-weight:600; cursor:pointer; transition:all .2s; }
+.upbtn.marine { background:linear-gradient(135deg,rgba(0,212,255,0.25),rgba(0,212,255,0.1)); color:var(--marine); border:1px solid rgba(0,212,255,0.3); }
+.upbtn.sml { background:linear-gradient(135deg,rgba(167,139,250,0.25),rgba(167,139,250,0.1)); color:var(--sml); border:1px solid rgba(167,139,250,0.3); }
+.upbtn:hover { transform:translateY(-1px); }
+
+/* ── SOURCE TABS ── */
+.source-tabs { display:flex; gap:4px; margin-bottom:20px; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:5px; width:fit-content; }
+.stab { padding:8px 22px; border-radius:8px; border:none; cursor:pointer; font-size:13px; font-family:'Sarabun',sans-serif; font-weight:600; transition:all .2s; color:var(--muted2); background:transparent; display:flex; align-items:center; gap:7px; }
+.stab.active-all { background:linear-gradient(135deg,rgba(0,212,255,0.15),rgba(167,139,250,0.15)); color:var(--text); border:1px solid var(--border); }
+.stab.active-marine { background:var(--marine-dim); color:var(--marine); border:1px solid rgba(0,212,255,0.3); }
+.stab.active-sml { background:var(--sml-dim); color:var(--sml); border:1px solid rgba(167,139,250,0.3); }
+.stab-count { font-size:10px; padding:1px 6px; border-radius:10px; font-family:'Space Mono',monospace; }
+.stab-all .stab-count { background:rgba(255,255,255,0.1); color:var(--muted2); }
+.stab-marine .stab-count { background:var(--marine-dim); color:var(--marine); }
+.stab-sml .stab-count { background:var(--sml-dim); color:var(--sml); }
+
+/* ── KPI GRID ── */
+.kpi-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin-bottom:20px; }
+.kpi { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; position:relative; overflow:hidden; transition:transform .2s, border-color .2s, box-shadow .2s; cursor:pointer; user-select:none; }
+.kpi:hover { transform:translateY(-2px); }
+.kpi.kpi-active { border-color: rgba(255,255,255,0.35) !important; box-shadow: 0 0 18px rgba(255,255,255,0.08); transform:translateY(-2px); }
+.kpi.kpi-active::before { content:'✕'; position:absolute; bottom:8px; right:10px; font-size:9px; color:rgba(255,255,255,0.3); font-family:'Space Mono',monospace; }
+.kpi.total.kpi-active { border-color:rgba(0,212,255,0.6) !important; box-shadow:0 0 18px rgba(0,212,255,0.15); }
+.kpi.marine-k.kpi-active { border-color:rgba(0,212,255,0.6) !important; box-shadow:0 0 18px rgba(0,212,255,0.15); }
+.kpi.sml-k.kpi-active { border-color:rgba(167,139,250,0.6) !important; box-shadow:0 0 18px rgba(167,139,250,0.15); }
+.kpi.cr.kpi-active { border-color:rgba(96,165,250,0.6) !important; box-shadow:0 0 18px rgba(96,165,250,0.15); }
+.kpi.defect.kpi-active { border-color:rgba(248,113,113,0.6) !important; box-shadow:0 0 18px rgba(248,113,113,0.15); }
+.kpi.issue.kpi-active { border-color:rgba(251,191,36,0.6) !important; box-shadow:0 0 18px rgba(251,191,36,0.15); }
+.kpi.open.kpi-active { border-color:rgba(245,158,11,0.6) !important; box-shadow:0 0 18px rgba(245,158,11,0.15); }
+.kpi.done.kpi-active { border-color:rgba(52,211,153,0.6) !important; box-shadow:0 0 18px rgba(52,211,153,0.15); }
+.kpi::after { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+.kpi.total::after { background:linear-gradient(90deg,var(--marine),var(--sml)); }
+.kpi.marine-k::after { background:linear-gradient(90deg,var(--marine),transparent); }
+.kpi.sml-k::after { background:linear-gradient(90deg,var(--sml),transparent); }
+.kpi.cr::after { background:linear-gradient(90deg,var(--cr),transparent); }
+.kpi.defect::after { background:linear-gradient(90deg,var(--defect),transparent); }
+.kpi.issue::after { background:linear-gradient(90deg,var(--issue),transparent); }
+.kpi.open::after { background:linear-gradient(90deg,var(--warn),transparent); }
+.kpi.done::after { background:linear-gradient(90deg,var(--success),transparent); }
+.kpi-lbl { font-size:10px; color:var(--muted2); text-transform:uppercase; letter-spacing:1px; margin-bottom:8px; font-family:'Space Mono',monospace; }
+.kpi-val { font-size:32px; font-weight:700; font-family:'Space Mono',monospace; line-height:1; }
+.kpi-sub { font-size:10px; color:var(--muted); margin-top:5px; }
+.kpi-ico { position:absolute; top:16px; right:16px; font-size:22px; opacity:0.2; }
+.kpi.total .kpi-val { background:linear-gradient(135deg,var(--marine),var(--sml)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.kpi.marine-k .kpi-val { color:var(--marine); }
+.kpi.sml-k .kpi-val { color:var(--sml); }
+.kpi.cr .kpi-val { color:var(--cr); }
+.kpi.defect .kpi-val { color:var(--defect); }
+.kpi.issue .kpi-val { color:var(--issue); }
+.kpi.open .kpi-val { color:var(--warn); }
+.kpi.done .kpi-val { color:var(--success); }
+
+/* ── CHARTS ── */
+.charts-row { display:grid; grid-template-columns:2fr 1fr 1fr; gap:14px; margin-bottom:20px; }
+.chart-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; overflow:visible; }
+.chart-title { font-size:10px; color:var(--muted2); text-transform:uppercase; letter-spacing:1px; margin-bottom:14px; font-family:'Space Mono',monospace; }
+.chart-wrap { position:relative; height:180px; }
+
+/* Source mini bars for overview */
+.source-compare { display:flex; flex-direction:column; gap:10px; justify-content:center; }
+.src-row { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.src-row-lbl { font-size:10px; color:var(--muted2); font-family:'Space Mono',monospace; }
+.src-bar-row { display:flex; align-items:center; gap:6px; min-width:0; }
+.src-bar-icon { font-size:9px; white-space:nowrap; flex-shrink:0; width:64px; font-family:'Space Mono',monospace; overflow:hidden; }
+.src-bar-icon.marine { color:var(--marine); }
+.src-bar-icon.sml { color:var(--sml); }
+.bar-track { height:7px; background:var(--surface3); border-radius:4px; overflow:hidden; flex:1; min-width:0; }
+.bar-fill { height:100%; border-radius:4px; transition:width .8s ease; }
+.bar-marine { background:linear-gradient(90deg,var(--marine),rgba(0,212,255,0.4)); }
+.bar-sml { background:linear-gradient(90deg,var(--sml),rgba(167,139,250,0.4)); }
+.src-bar-val { font-size:10px; font-family:'Space Mono',monospace; flex-shrink:0; width:22px; text-align:right; }
+.src-bar-val.marine { color:var(--marine); }
+.src-bar-val.sml { color:var(--sml); }
+
+/* ── TABLE ── */
+.table-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.table-hdr { padding:14px 18px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--border); flex-wrap:wrap; gap:10px; }
+.table-hdr h2 { font-size:13px; font-weight:600; }
+.controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.fbtn { padding:4px 11px; border-radius:16px; border:1px solid var(--border); background:transparent; color:var(--muted2); font-size:10px; cursor:pointer; transition:all .2s; font-family:'Sarabun',sans-serif; }
+.fbtn.active, .fbtn:hover { border-color:var(--marine); color:var(--marine); background:var(--marine-dim); }
+.fbtn.f-cr.active { border-color:var(--cr); color:var(--cr); background:rgba(96,165,250,0.1); }
+.fbtn.f-defect.active { border-color:var(--defect); color:var(--defect); background:rgba(248,113,113,0.1); }
+.fbtn.f-issue.active { border-color:var(--issue); color:var(--issue); background:rgba(251,191,36,0.1); }
+.search { display:flex; align-items:center; gap:6px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:5px 10px; }
+.search input { background:none; border:none; outline:none; color:var(--text); font-size:12px; font-family:'Sarabun',sans-serif; width:160px; }
+.search input::placeholder { color:var(--muted); }
+
+table { width:100%; border-collapse:collapse; }
+thead th { padding:9px 14px; text-align:left; font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; font-family:'Space Mono',monospace; border-bottom:1px solid var(--border); white-space:nowrap; }
+tbody tr { border-bottom:1px solid rgba(30,48,80,0.4); transition:background .15s; }
+tbody tr:hover { background:rgba(0,212,255,0.025); }
+tbody tr:last-child { border-bottom:none; }
+td { padding:10px 14px; font-size:12px; vertical-align:middle; }
+
+.source-tag { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:8px; font-size:9px; font-family:'Space Mono',monospace; font-weight:700; }
+.source-tag.Marine { background:var(--marine-dim); color:var(--marine); border:1px solid rgba(0,212,255,0.25); }
+.source-tag.SML { background:var(--sml-dim); color:var(--sml); border:1px solid rgba(167,139,250,0.25); }
+.req-id { font-family:'Space Mono',monospace; font-size:10px; }
+.req-id.Marine { color:var(--marine); }
+.req-id.SML { color:var(--sml); }
+
+.badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:9px; font-weight:700; font-family:'Space Mono',monospace; }
+.badge.CR { background:rgba(96,165,250,0.12); color:var(--cr); border:1px solid rgba(96,165,250,0.25); }
+.badge.Defect { background:rgba(248,113,113,0.12); color:var(--defect); border:1px solid rgba(248,113,113,0.25); }
+.badge.Issue { background:rgba(251,191,36,0.12); color:var(--issue); border:1px solid rgba(251,191,36,0.25); }
+
+.p-dot { display:inline-flex; align-items:center; gap:5px; font-size:11px; white-space:nowrap; }
+.p-dot::before { content:''; width:7px; height:7px; border-radius:50%; display:inline-block; flex-shrink:0; }
+.p1::before { background:var(--danger); box-shadow:0 0 5px var(--danger); }
+.p2::before { background:var(--warn); }
+.p3::before { background:var(--success); }
+
+.spill { display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:10px; font-size:9px; font-family:'Space Mono',monospace; }
+.sp-open { background:rgba(245,158,11,0.1); color:var(--warn); border:1px solid rgba(245,158,11,0.2); }
+.sp-done { background:rgba(52,211,153,0.1); color:var(--success); border:1px solid rgba(52,211,153,0.2); }
+.sp-prog { background:rgba(0,212,255,0.1); color:var(--marine); border:1px solid rgba(0,212,255,0.2); }
+
+.cell-mod { font-size:10px; color:var(--muted2); max-width:140px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cell-sub { font-size:11px; max-width:240px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cell-ts { font-size:10px; color:var(--muted); white-space:nowrap; }
+.cell-shop { font-size:10px; color:var(--muted2); max-width:130px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+.no-data { text-align:center; padding:50px; color:var(--muted); }
+.no-data .ico { font-size:40px; margin-bottom:10px; }
+
+#toast { position:fixed; bottom:20px; right:20px; padding:10px 18px; background:var(--surface2); border:1px solid var(--success); border-radius:10px; color:var(--success); font-size:12px; font-family:'Space Mono',monospace; transform:translateY(80px); opacity:0; transition:all .3s; z-index:9999; }
+#toast.show { transform:translateY(0); opacity:1; }
+
+.shop-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin-bottom:20px; }
+.shop-card-hdr { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; flex-wrap:wrap; gap:10px; }
+.shop-card-hdr h3 { font-size:10px; color:var(--muted2); text-transform:uppercase; letter-spacing:1px; font-family:'Space Mono',monospace; }
+.shop-sort-btns { display:flex; gap:6px; }
+.sort-btn { padding:3px 10px; border-radius:12px; border:1px solid var(--border); background:transparent; color:var(--muted2); font-size:10px; cursor:pointer; transition:all .2s; font-family:'Space Mono',monospace; }
+.sort-btn.active { border-color:var(--marine); color:var(--marine); background:var(--marine-dim); }
+.shop-list { display:flex; flex-direction:column; gap:7px; }
+.shop-row { display:grid; grid-template-columns:200px 1fr 80px; align-items:center; gap:10px; }
+.shop-name { font-size:11px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:right; }
+.shop-bar-track { height:22px; background:var(--surface3); border-radius:4px; overflow:hidden; position:relative; cursor:pointer; transition:opacity .15s; }
+.shop-bar-track:hover { opacity:0.85; }
+.shop-bar-fill { height:100%; border-radius:4px; display:flex; align-items:center; padding-left:8px; transition:width .6s ease; }
+.shop-bar-seg { height:100%; transition:width .6s ease; }
+.shop-bar-label { position:absolute; left:8px; top:50%; transform:translateY(-50%); font-size:10px; font-family:'Space Mono',monospace; color:rgba(255,255,255,0.85); pointer-events:none; white-space:nowrap; }
+.shop-total { font-size:12px; font-family:'Space Mono',monospace; color:var(--text); text-align:right; font-weight:700; }
+.shop-mini-badges { display:flex; gap:3px; justify-content:flex-end; flex-wrap:wrap; }
+.shop-mini-badge { font-size:9px; padding:1px 5px; border-radius:6px; font-family:'Space Mono',monospace; }
+.smb-cr { background:rgba(96,165,250,0.15); color:var(--cr); }
+.smb-defect { background:rgba(248,113,113,0.15); color:var(--defect); }
+.smb-issue { background:rgba(251,191,36,0.15); color:var(--issue); }
+.shop-row-grid { display:grid; grid-template-columns:180px 1fr auto auto; align-items:center; gap:10px; }
+
+@media(max-width:1000px){ .charts-row{grid-template-columns:1fr 1fr;} .charts-row .chart-card:first-child{grid-column:span 2;} .shop-row-grid{grid-template-columns:140px 1fr auto;} }
+@media(max-width:640px){ .charts-row{grid-template-columns:1fr;} .charts-row .chart-card:first-child{grid-column:span 1;} .kpi-grid{grid-template-columns:repeat(2,1fr);} .shop-row-grid{grid-template-columns:110px 1fr auto;} }
+
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:var(--surface);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🐋</div>
+    <div>
+      <h1>Case Management Dashboard</h1>
+      <span>Marine App &amp; SML App — Unified View</span>
+    </div>
+  </div>
+  <div class="hdr-right">
+    <div class="live-badge"><div class="dot"></div>LIVE</div>
+    <div class="ts" id="tsLabel">—</div>
+    <div class="upload-area">
+      <button class="upbtn marine" onclick="document.getElementById('fMarine').click()">📂 Marine Excel</button>
+      <button class="upbtn sml" onclick="document.getElementById('fSml').click()">📂 SML Excel</button>
+    </div>
+    <input type="file" id="fMarine" accept=".xlsx,.xls" style="display:none" onchange="handleUpload(event,'Marine')">
+    <input type="file" id="fSml" accept=".xlsx,.xls" style="display:none" onchange="handleUpload(event,'SML')">
+  </div>
+</header>
+
+<!-- SOURCE TABS -->
+<div class="source-tabs">
+  <button class="stab stab-all active-all" onclick="setSource('ALL',this)">
+    🌐 ภาพรวม <span class="stab-count" id="cnt-all">—</span>
+  </button>
+  <button class="stab stab-marine" onclick="setSource('Marine',this)">
+    🐋 Marine App <span class="stab-count" id="cnt-marine">—</span>
+  </button>
+  <button class="stab stab-sml" onclick="setSource('SML',this)">
+    💼 SML App <span class="stab-count" id="cnt-sml">—</span>
+  </button>
+</div>
+
+<!-- KPI -->
+<div class="kpi-grid" id="kpiGrid">
+  <div class="kpi total" id="kpi-btn-all" onclick="kpiFilter('all',this)"><div class="kpi-ico">📋</div><div class="kpi-lbl">เคสทั้งหมด</div><div class="kpi-val" id="k-total">—</div><div class="kpi-sub">รายการ</div></div>
+  <div class="kpi marine-k" id="kpi-marine-wrap" onclick="kpiFilter('marine',this)"><div class="kpi-ico">🐋</div><div class="kpi-lbl">Marine App</div><div class="kpi-val" id="k-marine">—</div><div class="kpi-sub">เคส</div></div>
+  <div class="kpi sml-k" id="kpi-sml-wrap" onclick="kpiFilter('sml',this)"><div class="kpi-ico">💼</div><div class="kpi-lbl">SML App</div><div class="kpi-val" id="k-sml">—</div><div class="kpi-sub">เคส</div></div>
+  <div class="kpi cr" onclick="kpiFilter('CR',this)"><div class="kpi-ico">🔵</div><div class="kpi-lbl">CR</div><div class="kpi-val" id="k-cr">—</div><div class="kpi-sub">Change Request</div></div>
+  <div class="kpi defect" onclick="kpiFilter('Defect',this)"><div class="kpi-ico">🔴</div><div class="kpi-lbl">Defect</div><div class="kpi-val" id="k-defect">—</div><div class="kpi-sub">บัก / ข้อผิดพลาด</div></div>
+  <div class="kpi issue" onclick="kpiFilter('Issue',this)"><div class="kpi-ico">🟡</div><div class="kpi-lbl">Issue</div><div class="kpi-val" id="k-issue">—</div><div class="kpi-sub">ปัญหาการใช้งาน</div></div>
+  <div class="kpi open" onclick="kpiFilter('open',this)"><div class="kpi-ico">⏳</div><div class="kpi-lbl">รอดำเนินการ</div><div class="kpi-val" id="k-open">—</div><div class="kpi-sub">ยังไม่มี Status</div></div>
+  <div class="kpi done" onclick="kpiFilter('done',this)"><div class="kpi-ico">✅</div><div class="kpi-lbl">Done</div><div class="kpi-val" id="k-done">—</div><div class="kpi-sub">เสร็จสิ้น</div></div>
+</div>
+
+<!-- CHARTS -->
+<div class="charts-row">
+  <div class="chart-card">
+    <div class="chart-title">เคสตาม Module (Top 10)</div>
+    <div class="chart-wrap"><canvas id="cModule"></canvas></div>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">ประเภทเคส</div>
+    <div class="chart-wrap"><canvas id="cType"></canvas></div>
+  </div>
+  <div class="chart-card" id="compareCard">
+    <div class="chart-title">เปรียบเทียบ Marine vs SML</div>
+    <div class="source-compare" id="srcCompare" style="height:auto;min-height:160px;"></div>
+  </div>
+</div>
+
+<!-- SHOP SECTION -->
+<div class="shop-card">
+  <div class="shop-card-hdr">
+    <h3>🏪 จำนวนเคสตามร้านค้า</h3>
+    <div class="shop-sort-btns">
+      <button class="sort-btn active" onclick="setShopSort('total',this)">เรียงตามจำนวน</button>
+      <button class="sort-btn" onclick="setShopSort('name',this)">เรียงตามชื่อ</button>
+    </div>
+  </div>
+  <div class="shop-list" id="shopList"></div>
+</div>
+
+<!-- TABLE -->
+<div class="table-card">
+  <div class="table-hdr">
+    <h2>รายการเคสทั้งหมด <span id="rowCount" style="font-size:11px;color:var(--muted);margin-left:6px;font-family:'Space Mono',monospace"></span></h2>
+    <div class="controls">
+      <button class="fbtn active" data-f="ALL" onclick="setType('ALL',this)">ทั้งหมด</button>
+      <button class="fbtn f-cr" data-f="CR" onclick="setType('CR',this)">CR</button>
+      <button class="fbtn f-defect" data-f="Defect" onclick="setType('Defect',this)">Defect</button>
+      <button class="fbtn f-issue" data-f="Issue" onclick="setType('Issue',this)">Issue</button>
+      <div class="search">🔍 <input id="searchQ" placeholder="ค้นหา..." oninput="renderTable()"></div>
+    </div>
+  </div>
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>ระบบ</th><th>REQ#</th><th>วันที่</th><th>ผู้แจ้ง</th><th>ร้านค้า</th>
+          <th>Module</th><th>เรื่อง</th><th>Priority</th><th>Type</th><th>SML Status</th><th>DH Status</th>
+        </tr>
+      </thead>
+      <tbody id="tBody"></tbody>
+    </table>
+  </div>
+</div>
+
+</div><!-- /wrap -->
+<div id="toast"></div>
+
+<script>
+// ── DEFAULT DATA ──
+const MARINE_DATA = [{"Column 2":"REQ-0001","Timestamp":"2026-02-03 17:03","ผู้แจ้ง":"test","ระบุร้านค้า":"บุญเจริญฯ อ.บัวเซต สุรินทร์","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"test","Priority":1,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0002","Timestamp":"2026-02-03 17:03","ผู้แจ้ง":"test","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"tes","Priority":1,"Type":"Defect","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0003","Timestamp":"2026-02-03 17:50","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab รายการชำระเงิน","เรื่อง":"รายการตั้งหนี้ไม่แสดง","Priority":3,"Type":"Defect","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0004","Timestamp":"2026-02-03 22:30","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"POS","เรื่อง":"QR Code ttb นิติบุคคล ที่เครื่อง POS / ในแอพธนาคารแสดงเลขบัญชีไม่ตรงกับ QR ต้นฉบับ","Priority":3,"Type":"Defect","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0005","Timestamp":"2026-02-03 22:35","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"POS & Mobile app & รายงาน","เรื่อง":"เมื่อยกเลิกรายการขายทั้งบิล มีสถานะยกเลิกที่หน้าเครื่อง POS แต่ไม่มีเอกสารยกเลิกออกมา","Priority":3,"Type":"Defect","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0006","Timestamp":"2026-02-03 22:37","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Mobile","เรื่อง":"Report ในมือถือ กำไร-ขาดทุนไม่ตรง","Priority":3,"Type":"Defect","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0007","Timestamp":"2026-02-03 22:43","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"เมนูในรายการบัญชี > ตรวจสอบข้อมูลรายวัน กดเข้าไปแล้วไม่สามารถใช้งานได้","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0008","Timestamp":"2026-02-03 22:49","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab รายงาน","เรื่อง":"รายงานสินค้าคงเหลือ ทั้ง 5 เมนู มีปัญหาตอนเรียกดูรายงาน หมุน/ค้าง","Priority":2,"Type":"Defect","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0009","Timestamp":"2026-02-03 22:54","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab รายงาน","เรื่อง":"รายงานสต๊อกทุกรายงาน ข้อมูลที่แสดงไม่ตรงตามเงื่อนไข","Priority":3,"Type":"Defect","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0010","Timestamp":"2026-02-03 22:57","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"เมนูซื้อสินค้ามีไว้ใช้ในกรณีไหน","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0011","Timestamp":"2026-02-03 22:58","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"เมนูรับเงินล่วงหน้า/คืนเงินล่วงหน้าใช้ทำอะไร ต่างจากเงินมัดจำอย่างไร","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0012","Timestamp":"2026-02-03 22:59","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"รายการขายเครดิตไม่แสดง รายการในเมนูรับชำระ","Priority":3,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0013","Timestamp":"2026-02-03 23:02","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"เมนูขาย: (ขายเครดิต) สามารถเลือกแสดงราคา/ไม่แสดงราคาในใบส่งสินค้า","Priority":3,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0014","Timestamp":"2026-02-03 23:04","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"หน้าขายเครดิต อยากให้สามารถปริ้นเอกสาร 2 ใบ","Priority":3,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0015","Timestamp":"2026-02-03 23:05","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab รายงาน","เรื่อง":"รายงานซื้อ และรายงานขาย เพิ่มแยกตามหมวดหมู่/Supplier/กลุ่มสินค้า","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0016","Timestamp":"2026-02-03 23:06","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"อยากให้เพิ่มเมนูเบิกสินค้าสำหรับทีมขายออนไลน์","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0017","Timestamp":"2026-02-03 23:08","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab รายงาน","เรื่อง":"เพิ่มรายงานแต้มสมาชิก","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0018","Timestamp":"2026-02-03 23:09","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"เพิ่มฟังก์ชันการนับสต๊อกตามสิทธิ์","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0019","Timestamp":"2026-02-03 23:11","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"Tab ข้อมูลหลัก","เรื่อง":"Stock อ้างอิงแปลกๆ","Priority":3,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0020","Timestamp":"2026-02-04 09:00","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab รายงาน","เรื่อง":"ต้องการดึงข้อมูลลูกค้าในระบบ","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0021","Timestamp":"2026-02-04 09:03","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"ต้องการดึงข้อมูลการเบิกสินค้า","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0022","Timestamp":"2026-02-04 09:19","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"ทุกร้าน","Module":"Tab ข้อมูลหลัก","เรื่อง":"ขอเพิ่ม Column รหัสสินค้า, BarReference ในสินค้า master","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0023","Timestamp":"2026-02-04 09:33","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลประจำวัน","เรื่อง":"สั่งพิมพ์ใบเสนอราคาไม่ได้","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0024","Timestamp":"2026-02-04 10:43","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"DNA ร้านดีเอ็นเอ กรุ๊ป จ.นครราชสีมา","Module":"Tab ข้อมูลหลัก","เรื่อง":"การปรับสต๊อกจำนวนมาก เนื่องจากร้านคืนสินค้า Lot ใหญ่","Priority":3,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0025","Timestamp":"2026-02-04 11:32","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"บุญเจริญฯ อ.บัวเซต สุรินทร์","Module":"Tab ข้อมูลหลัก","เรื่อง":"Upload Master 1 รหัสมีหลายหน่วย","Priority":2,"Type":"Defect","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0026","Timestamp":"2026-03-11 09:43","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"Re Training ระบบหลังบ้าน","เรื่อง":"Re Training ระบบหลังบ้าน","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0027","Timestamp":"2026-03-11 09:47","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"Setup ระบบหลังบ้าน(เป็นร้านใหม่)","เรื่อง":"Setup ระบบหลังบ้าน(เป็นร้านใหม๋)","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0028","Timestamp":"2026-03-11 09:49","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"ระบบหลังร้าน","เรื่อง":"ทำคู่มือเพื่อใช้อบรม Re-Training","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0029","Timestamp":"2026-03-11 09:53","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"ระบบหลังบ้าน","เรื่อง":"อบรม Re-Training การรับสินค้าตามหน่วย","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0030","Timestamp":"2026-03-11 09:57","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"ระบบหลังบ้าน - Upload file","เรื่อง":"ปัญหาการ Upload file Master เกิด Error รูปแบบไฟล์ไม่ถูกต้อง","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0031","Timestamp":"2026-03-11 10:00","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"ระบบหลังบ้าน - Upload file","เรื่อง":"ติดตามปัญหา Upload file กับทีม SML Marine","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0032","Timestamp":"2026-03-11 10:09","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"ระบบหลังบ้าน Upload file","เรื่อง":"พบปัญหา Master สินค้าอ้างอิงบาร์โค้ดให้อัตโนมัติ","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0033","Timestamp":"2026-03-11 10:17","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"ระบบหลังร้าน - Upload file","เรื่อง":"ทดสอบการ Upload file - Master สินค้า","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"},{"Column 2":"REQ-0034","Timestamp":"2026-03-11 10:27","ผู้แจ้ง":"เมธี","ระบุร้านค้า":"เหล็กฟ้าใส (CIA) จ.นครราชสีมา","Module":"Setup ร้านใหม่","เรื่อง":"Setup ร้าน CIA ใหม่ เพื่อแก้ไขปัญหา","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"Marine"}];
+
+const SML_DATA = [{"Column 2":"REQ-0001","Timestamp":"2026-02-03 16:56","ผู้แจ้ง":"test","ระบุร้านค้า":"CTW ร้านโชคทวีวัสดุ","Module":"2.สินค้า","เรื่อง":"test","Priority":1,"Type":"Defect","SML Status":"Done","DH Status":"","Source":"SML"},{"Column 2":"REQ-0002","Timestamp":"2026-02-03 16:57","ผู้แจ้ง":"test","ระบุร้านค้า":"MS_เสริมสิน","Module":"1.เริ่มต้น","เรื่อง":"test","Priority":1,"Type":"Defect","SML Status":"Done","DH Status":"","Source":"SML"},{"Column 2":"REQ-0003","Timestamp":"2026-02-03 17:17","ผู้แจ้ง":"Test","ระบุร้านค้า":"KS_ร้านก่อศิลป์","Module":"12. Data","เรื่อง":"test","Priority":1,"Type":"CR","SML Status":"Done","DH Status":"","Source":"SML"},{"Column 2":"REQ-0004","Timestamp":"2026-02-03 21:46","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"CTW ร้านโชคทวีวัสดุ","Module":"2.สินค้า","เรื่อง":"สินค้ายกเลิกขายแสดงที่รายงานใด","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0005","Timestamp":"2026-02-03 21:50","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"CTW ร้านโชคทวีวัสดุ","Module":"2.สินค้า","เรื่อง":"การเพิ่มสินค้า Master อยากให้ทำเสร็จในหน้าเดียว","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0006","Timestamp":"2026-02-03 21:51","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"CTW ร้านโชคทวีวัสดุ","Module":"2.สินค้า","เรื่อง":"รายงานวิเคราะห์สินค้า เพิ่มชื่อกลุ่มสินค้าหลัก","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0007","Timestamp":"2026-02-03 21:54","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"CTW ร้านโชคทวีวัสดุ","Module":"2.สินค้า","เรื่อง":"รายงานยอดคงเหลือสินค้า ให้แสดงสินค้าที่มี Stock 0 ด้วย","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0008","Timestamp":"2026-02-03 21:57","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"CTW ร้านโชคทวีวัสดุ","Module":"2.สินค้า","เรื่อง":"เพิ่มข้อมูลในรายงาน 1004EX2","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0009","Timestamp":"2026-02-03 22:00","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"CTW ร้านโชคทวีวัสดุ","Module":"2.สินค้า","เรื่อง":"Filter การเลือกกลุ่มสินค้าในรายงานต่างๆ","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0010","Timestamp":"2026-02-03 22:04","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"KS_ร้านก่อศิลป์","Module":"4.ขาย","เรื่อง":"รายงานกำไร ราคาในรายงานไม่มี Vat","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0011","Timestamp":"2026-02-03 22:06","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"KS_ร้านก่อศิลป์","Module":"4.ขาย","เรื่อง":"เพิ่มฟังก์ชั่นเลือกแสดง มีราคา/ไม่มีราคาในใบส่งสินค้า","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0012","Timestamp":"2026-02-03 22:10","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"MS_เสริมสิน","Module":"5.ขาย POS","เรื่อง":"ให้ใส่รหัสสมาชิกขั้นตอนไหนก็ได้","Priority":3,"Type":"Defect","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0013","Timestamp":"2026-02-03 22:12","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"MS_เสริมสิน","Module":"5.ขาย POS","เรื่อง":"ลิ้นชักเงินไม่เด้งออกเมื่อรับเงิน","Priority":3,"Type":"Defect","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0014","Timestamp":"2026-02-03 22:13","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"MS_เสริมสิน","Module":"5.ขาย POS","เรื่อง":"ตั้งค่าแสดง QR ที่ POS จอ 2 ให้ลูกค้าแสกนจ่าย","Priority":3,"Type":"Issue","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0015","Timestamp":"2026-02-04 09:13","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"SML ในทุกร้าน","Module":"System","เรื่อง":"Cannot Access SML DATA","Priority":2,"Type":"Defect","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0016","Timestamp":"2026-02-05 09:16","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"PC ร้านพิเชียรวัสดุ","Module":"10. บัญชี","เรื่อง":"อยากได้จำนวนเงินหลัง Vat ในเอกสาร SRV","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0017","Timestamp":"2026-02-23 10:40","ผู้แจ้ง":"กอล์ฟ","ระบุร้านค้า":"MS_เสริมสิน","Module":"3.ซื้อ","เรื่อง":"ต้องการเปิด PO ให้ดึงราคาซื้อล่าสุด","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0018","Timestamp":"2026-02-27 09:13","ผู้แจ้ง":"คุณมิน - ก่อศิลป์","ระบุร้านค้า":"KS_ร้านก่อศิลป์","Module":"ลงโปรแกรม SML ใหม่","เรื่อง":"ร้านลง Windows ใหม่แล้วไม่มีโปรแกรม SML","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0019","Timestamp":"2026-02-27 09:17","ผู้แจ้ง":"คุณมิน - ก่อศิลป์","ระบุร้านค้า":"KS_ร้านก่อศิลป์","Module":"Hardware","เรื่อง":"PC และ POS เครื่องเก่าปริ้นเอกสารไม่ได้","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0020","Timestamp":"2026-02-27 09:38","ผู้แจ้ง":"KAMONWAN J. - บัญชีโชคทวี","ระบุร้านค้า":"CTW ร้านโชคทวีวัสดุ","Module":"Hardware","เรื่อง":"ลงโปรแกรม SML ไม่ได้ ติด Error .net framework 3.5","Priority":2,"Type":"CR","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0021","Timestamp":"2026-03-02 09:50","ผู้แจ้ง":"คุณมิน - ก่อศิลป์","ระบุร้านค้า":"KS_ร้านก่อศิลป์","Module":"4.ขาย","เรื่อง":"ดึงรายงานขายสินค้าและบริการในระบบไม่ได้","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0022","Timestamp":"2026-03-02 13:29","ผู้แจ้ง":"Big พนักงานคลัง - ร้านพิเชียร","ระบุร้านค้า":"PC ร้านพิเชียรวัสดุ","Module":"3.ซื้อ","เรื่อง":"มองไม่เห็นเลขที่เอกสาร PI (รับสินค้า)","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"SML"},{"Column 2":"REQ-0023","Timestamp":"2026-03-02 14:07","ผู้แจ้ง":"Big พนักงานคลังร้านพิเชียร","ระบุร้านค้า":"PC ร้านพิเชียรวัสดุ","Module":"3.ซื้อ","เรื่อง":"ยกเลิก PO ผิด และยอดไม่ตรงกับใบเสนอ","Priority":2,"Type":"Issue","SML Status":"","DH Status":"","Source":"SML"}];
+
+// ── STATE ──
+let DB = { Marine: [...MARINE_DATA], SML: [...SML_DATA] };
+let activeSource = 'ALL';
+let activeType = 'ALL';
+let activeKpi = null; // 'all','marine','sml','CR','Defect','Issue','open','done'
+let charts = {};
+
+function kpiFilter(key, el) {
+  if (activeKpi === key) {
+    // toggle off
+    activeKpi = null;
+    document.querySelectorAll('.kpi').forEach(k => k.classList.remove('kpi-active'));
+  } else {
+    activeKpi = key;
+    document.querySelectorAll('.kpi').forEach(k => k.classList.remove('kpi-active'));
+    el.classList.add('kpi-active');
+    // Sync source tab if marine/sml kpi clicked
+    if (key === 'marine') {
+      activeSource = 'Marine';
+      document.querySelectorAll('.stab').forEach(b => b.className = 'stab ' + b.dataset.cls);
+      document.querySelector('.stab-marine').classList.add('active-marine');
+      document.getElementById('kpi-marine-wrap').style.display = '';
+      document.getElementById('kpi-sml-wrap').style.display = 'none';
+      document.getElementById('compareCard').style.display = 'none';
+    } else if (key === 'sml') {
+      activeSource = 'SML';
+      document.querySelectorAll('.stab').forEach(b => b.className = 'stab ' + b.dataset.cls);
+      document.querySelector('.stab-sml').classList.add('active-sml');
+      document.getElementById('kpi-marine-wrap').style.display = 'none';
+      document.getElementById('kpi-sml-wrap').style.display = '';
+      document.getElementById('compareCard').style.display = 'none';
+    }
+    // Sync type filter buttons for CR/Defect/Issue
+    if (['CR','Defect','Issue'].includes(key)) {
+      activeType = key;
+      document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
+      document.querySelector(`.fbtn[data-f="${key}"]`).classList.add('active');
+    } else {
+      activeType = 'ALL';
+      document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
+      document.querySelector('.fbtn[data-f="ALL"]').classList.add('active');
+    }
+  }
+  renderShops();
+  renderTable();
+}
+
+function getFiltered() {
+  let rows = activeSource === 'ALL' ? [...DB.Marine, ...DB.SML]
+           : activeSource === 'Marine' ? [...DB.Marine]
+           : [...DB.SML];
+  // Apply KPI filter
+  if (activeKpi === 'open') rows = rows.filter(r => !r['SML Status'] && !r['DH Status']);
+  else if (activeKpi === 'done') rows = rows.filter(r => r['SML Status']==='Done' || r['DH Status']==='Done');
+  else if (activeType !== 'ALL') rows = rows.filter(r => r.Type === activeType);
+  const q = (document.getElementById('searchQ').value || '').toLowerCase();
+  if (q) rows = rows.filter(r =>
+    [r['Column 2'], r['เรื่อง'], r['ระบุร้านค้า'], r['Module'], r['ผู้แจ้ง']].some(v => (v||'').toLowerCase().includes(q))
+  );
+  return rows;
+}
+function getAllSource(src) { return src === 'ALL' ? [...DB.Marine,...DB.SML] : DB[src] || []; }
+
+// ── TABS ──
+function setSource(src, btn) {
+  activeSource = src;
+  document.querySelectorAll('.stab').forEach(b => b.className = 'stab ' + b.dataset.cls);
+  btn.classList.add('active-' + src.toLowerCase());
+  // show/hide source KPIs
+  document.getElementById('kpi-marine-wrap').style.display = (src === 'SML') ? 'none' : '';
+  document.getElementById('kpi-sml-wrap').style.display = (src === 'Marine') ? 'none' : '';
+  document.getElementById('compareCard').style.display = (src === 'ALL') ? '' : 'none';
+  updateAll();
+}
+// set dataset on tabs for class reset
+document.querySelectorAll('.stab').forEach(b => {
+  const cls = b.classList.contains('stab-all') ? 'stab-all' : b.classList.contains('stab-marine') ? 'stab-marine' : 'stab-sml';
+  b.dataset.cls = cls;
+});
+
+function setType(t, btn) {
+  activeType = t;
+  document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable();
+}
+
+// ── UPDATE ALL ──
+let shopSort = 'total';
+function setShopSort(s, btn) {
+  shopSort = s;
+  document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderShops();
+}
+function updateAll() { updateKPIs(); updateCharts(); renderShops(); renderTable(); updateTs(); }
+
+function updateKPIs() {
+  const d = (activeKpi && activeKpi !== 'all' && activeKpi !== 'marine' && activeKpi !== 'sml') ? getFiltered() : getAllSource(activeSource);
+  document.getElementById('k-total').textContent = d.length;
+  document.getElementById('k-marine').textContent = DB.Marine.length;
+  document.getElementById('k-sml').textContent = DB.SML.length;
+  document.getElementById('k-cr').textContent = d.filter(r=>r.Type==='CR').length;
+  document.getElementById('k-defect').textContent = d.filter(r=>r.Type==='Defect').length;
+  document.getElementById('k-issue').textContent = d.filter(r=>r.Type==='Issue').length;
+  document.getElementById('k-open').textContent = d.filter(r=>!r['SML Status']&&!r['DH Status']).length;
+  document.getElementById('k-done').textContent = d.filter(r=>r['SML Status']==='Done'||r['DH Status']==='Done').length;
+  document.getElementById('cnt-all').textContent = DB.Marine.length + DB.SML.length;
+  document.getElementById('cnt-marine').textContent = DB.Marine.length;
+  document.getElementById('cnt-sml').textContent = DB.SML.length;
+}
+
+function updateCharts() {
+  const d = getAllSource(activeSource);
+
+  // Module bar
+  const mc = {};
+  d.forEach(r => { const m=(r.Module||'ไม่ระบุ').trim(); mc[m]=(mc[m]||0)+1; });
+  const top = Object.entries(mc).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  if (charts.mod) charts.mod.destroy();
+  charts.mod = new Chart(document.getElementById('cModule').getContext('2d'), {
+    type:'bar',
+    data:{ labels:top.map(x=>x[0]), datasets:[{
+      data:top.map(x=>x[1]),
+      backgroundColor:top.map((_,i)=>`hsla(${195+i*18},75%,55%,0.65)`),
+      borderColor:top.map((_,i)=>`hsl(${195+i*18},75%,55%)`),
+      borderWidth:1, borderRadius:4
+    }]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{
+        x:{ticks:{color:'#4a6080',font:{family:'Sarabun',size:9},maxRotation:35},grid:{color:'#162032'}},
+        y:{ticks:{color:'#4a6080',font:{family:'Space Mono',size:9}},grid:{color:'#162032'},beginAtZero:true}
+      }
+    }
+  });
+
+  // Type donut
+  const types=['CR','Defect','Issue'];
+  const tc=types.map(t=>d.filter(r=>r.Type===t).length);
+  if (charts.type) charts.type.destroy();
+  charts.type = new Chart(document.getElementById('cType').getContext('2d'), {
+    type:'doughnut',
+    data:{ labels:types, datasets:[{ data:tc,
+      backgroundColor:['rgba(96,165,250,0.75)','rgba(248,113,113,0.75)','rgba(251,191,36,0.75)'],
+      borderColor:['#60a5fa','#f87171','#fbbf24'], borderWidth:2, hoverOffset:5
+    }]},
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'62%',
+      plugins:{ legend:{ position:'bottom', labels:{color:'#6b84a0',font:{family:'Space Mono',size:9},padding:12,boxWidth:8} } }
+    }
+  });
+
+  // Source compare
+  if (activeSource === 'ALL') {
+    const total = DB.Marine.length + DB.SML.length;
+    const mp = total ? Math.round(DB.Marine.length/total*100) : 0;
+    const sp = total ? Math.round(DB.SML.length/total*100) : 0;
+    const metrics = [
+      { lbl:'เคสทั้งหมด', mV:DB.Marine.length, sV:DB.SML.length, max:Math.max(DB.Marine.length,DB.SML.length) },
+      { lbl:'CR', mV:DB.Marine.filter(r=>r.Type==='CR').length, sV:DB.SML.filter(r=>r.Type==='CR').length, max:null },
+      { lbl:'Defect', mV:DB.Marine.filter(r=>r.Type==='Defect').length, sV:DB.SML.filter(r=>r.Type==='Defect').length, max:null },
+      { lbl:'Issue', mV:DB.Marine.filter(r=>r.Type==='Issue').length, sV:DB.SML.filter(r=>r.Type==='Issue').length, max:null },
+    ];
+    metrics.forEach(m => { if(!m.max) m.max = Math.max(m.mV, m.sV) || 1; });
+    document.getElementById('srcCompare').innerHTML = metrics.map(m=>`
+      <div class="src-row">
+        <div class="src-row-lbl">${m.lbl}</div>
+        <div class="src-bar-row">
+          <span class="src-bar-icon marine">🐋 Marine</span>
+          <div class="bar-track"><div class="bar-fill bar-marine" style="width:${Math.round(m.mV/m.max*100)}%"></div></div>
+          <span class="src-bar-val marine">${m.mV}</span>
+        </div>
+        <div class="src-bar-row">
+          <span class="src-bar-icon sml">💼 SML</span>
+          <div class="bar-track"><div class="bar-fill bar-sml" style="width:${Math.round(m.sV/m.max*100)}%"></div></div>
+          <span class="src-bar-val sml">${m.sV}</span>
+        </div>
+      </div>`).join('');
+  }
+}
+
+function renderShops() {
+  const d = getAllSource(activeSource);
+  // Build shop map
+  const shopMap = {};
+  d.forEach(r => {
+    const shop = (r['ระบุร้านค้า'] || 'ไม่ระบุ').trim();
+    if (!shopMap[shop]) shopMap[shop] = { total:0, CR:0, Defect:0, Issue:0, marine:0, sml:0 };
+    shopMap[shop].total++;
+    if (r.Type === 'CR') shopMap[shop].CR++;
+    if (r.Type === 'Defect') shopMap[shop].Defect++;
+    if (r.Type === 'Issue') shopMap[shop].Issue++;
+    if (r.Source === 'Marine') shopMap[shop].marine++;
+    else shopMap[shop].sml++;
+  });
+
+  let entries = Object.entries(shopMap);
+  if (shopSort === 'total') entries.sort((a,b) => b[1].total - a[1].total);
+  else entries.sort((a,b) => a[0].localeCompare(b[0], 'th'));
+
+  const maxTotal = entries.length ? entries[0][1].total : 1;
+  // when sorted by name, recalculate max
+  const maxVal = Math.max(...entries.map(e=>e[1].total)) || 1;
+
+  document.getElementById('shopList').innerHTML = entries.map(([name, s]) => {
+    const pct = Math.round(s.total / maxVal * 100);
+    const crPct = s.total ? Math.round(s.CR/s.total*100) : 0;
+    const defPct = s.total ? Math.round(s.Defect/s.total*100) : 0;
+    const issPct = s.total ? Math.round(s.Issue/s.total*100) : 0;
+    const srcBadge = activeSource === 'ALL'
+      ? `<span style="font-size:9px;color:var(--muted);font-family:'Space Mono',monospace">${s.marine>0?`🐋${s.marine}`:''}${s.marine>0&&s.sml>0?' ':''}${s.sml>0?`💼${s.sml}`:''}</span>`
+      : '';
+    return `
+    <div class="shop-row-grid">
+      <div class="shop-name" title="${name}">${name}</div>
+      <div style="position:relative">
+        <div class="shop-bar-track" title="${name}: ${s.total} เคส (CR:${s.CR} Defect:${s.Defect} Issue:${s.Issue})">
+          <div style="display:flex;height:100%;width:${pct}%;border-radius:4px;overflow:hidden">
+            <div style="width:${crPct}%;background:rgba(96,165,250,0.7);flex-shrink:0"></div>
+            <div style="width:${defPct}%;background:rgba(248,113,113,0.7);flex-shrink:0"></div>
+            <div style="width:${issPct}%;background:rgba(251,191,36,0.7);flex-shrink:0"></div>
+          </div>
+          <span class="shop-bar-label">${s.CR>0?`CR:${s.CR} `:''}${s.Defect>0?`D:${s.Defect} `:''}${s.Issue>0?`I:${s.Issue}`:''}</span>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;justify-content:flex-end">
+        ${srcBadge}
+        <span class="shop-total">${s.total}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderTable() {
+  const rows = getFiltered();
+  document.getElementById('rowCount').textContent = `(${rows.length} รายการ)`;
+  if (!rows.length) {
+    document.getElementById('tBody').innerHTML = `<tr><td colspan="11"><div class="no-data"><div class="ico">🔍</div>ไม่พบข้อมูล</div></td></tr>`;
+    return;
+  }
+  document.getElementById('tBody').innerHTML = rows.map(r => {
+    const pC = r.Priority===1?'p1':r.Priority===2?'p2':'p3';
+    const pL = r.Priority===1?'🔴 สูง':r.Priority===2?'🟡 กลาง':'🟢 ต่ำ';
+    const sml = r['SML Status'] ? spill(r['SML Status']) : '<span class="spill sp-open">⏳ รอ</span>';
+    const dh = r['DH Status'] ? spill(r['DH Status']) : '<span class="spill sp-open">⏳ รอ</span>';
+    return `<tr>
+      <td><span class="source-tag ${r.Source}">${r.Source==='Marine'?'🐋':'💼'} ${r.Source}</span></td>
+      <td><span class="req-id ${r.Source}">${r['Column 2']}</span></td>
+      <td class="cell-ts">${r.Timestamp}</td>
+      <td style="font-size:11px">${r['ผู้แจ้ง']}</td>
+      <td class="cell-shop" title="${r['ระบุร้านค้า']}">${r['ระบุร้านค้า']}</td>
+      <td><div class="cell-mod" title="${r.Module}">${r.Module}</div></td>
+      <td><div class="cell-sub" title="${r['เรื่อง']}">${r['เรื่อง']}</div></td>
+      <td><span class="p-dot ${pC}">${pL}</span></td>
+      <td><span class="badge ${r.Type}">${r.Type}</span></td>
+      <td>${sml}</td>
+      <td>${dh}</td>
+    </tr>`;
+  }).join('');
+}
+
+function spill(v) {
+  const l = (v||'').toLowerCase();
+  if (l.includes('done')||l.includes('เสร็จ')) return `<span class="spill sp-done">✓ ${v}</span>`;
+  if (l.includes('prog')||l.includes('กำลัง')) return `<span class="spill sp-prog">⚡ ${v}</span>`;
+  return `<span class="spill sp-open">${v}</span>`;
+}
+
+function updateTs() {
+  document.getElementById('tsLabel').textContent = 'Updated ' + new Date().toLocaleTimeString('th-TH');
+}
+
+// ── FILE UPLOAD ──
+function handleUpload(e, src) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const wb = XLSX.read(new Uint8Array(ev.target.result), {type:'array',cellDates:true});
+      const sheetName = wb.SheetNames.find(n=>n===src) || wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {defval:''});
+      const parsed = rows.filter(r=>String(r['Column 2']).startsWith('REQ')).map(r=>({
+        'Column 2': r['Column 2']||'',
+        'Timestamp': fmtDate(r['Timestamp']),
+        'ผู้แจ้ง': r['ผู้แจ้ง']||'',
+        'ระบุร้านค้า': r['ระบุร้านค้า']||'',
+        'Module': (r['Module']||'').trim(),
+        'เรื่อง': r['เรื่อง']||'',
+        'Priority': parseInt(r['Priority'])||0,
+        'Type': r['Type']||'',
+        'SML Status': r['SML Status']||'',
+        'DH Status': r['DH Status']||'',
+        'Source': src
+      }));
+      if (parsed.length) {
+        DB[src] = parsed;
+        updateAll();
+        toast(`✓ ${src}: โหลด ${parsed.length} รายการจาก ${file.name}`);
+      } else { toast('⚠ ไม่พบข้อมูลในรูปแบบที่รองรับ'); }
+    } catch(err) { toast('❌ เกิดข้อผิดพลาดในการอ่านไฟล์'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function fmtDate(v) {
+  if (!v) return '';
+  if (v instanceof Date) return v.toLocaleDateString('th-TH',{year:'numeric',month:'2-digit',day:'2-digit'})+' '+v.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+  return String(v).substring(0,16);
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 3500);
+}
+
+// ── DRAG DROP ──
+document.body.addEventListener('dragover', e=>e.preventDefault());
+document.body.addEventListener('drop', e => {
+  e.preventDefault();
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  const src = file.name.toLowerCase().includes('sml') ? 'SML' : 'Marine';
+  const fakeEvt = { target:{ files:[file] } };
+  handleUpload(fakeEvt, src);
+  toast(`🔍 ตรวจพบไฟล์ ${file.name} → บันทึกเป็น ${src}`);
+});
+
+// ── INIT ──
+updateAll();
+</script>
+</body>
+</html>
